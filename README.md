@@ -28,8 +28,8 @@ Este proyecto consiste en el desarrollo de un **Dashboard Interactivo** diseñad
 
 ## 📁 Estructura del Proyecto
 - `index.html`: Versión renderizada del dashboard interactivo.
-- `dashboard_cancer_pulmon.qmd`: Código fuente completo con el flujo de análisis en Quarto.
-- `data/`: Dataset procesado utilizado para las visualizaciones.
+- `ARMENDARIZ_DASHBOARD_CANCER_PULMON.qmd`: Código fuente completo con el flujo de análisis en Quarto.
+- `lung_cancer`: Dataset procesado utilizado para las visualizaciones.
 
 ---
 
