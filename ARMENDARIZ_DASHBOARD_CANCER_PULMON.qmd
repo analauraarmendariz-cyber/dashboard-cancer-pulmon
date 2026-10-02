@@ -1,0 +1,495 @@
+---
+title: "Dashboard – Análisis de Cáncer de Pulmón"
+author: "Armendariz Ana Laura"
+
+format:
+  dashboard:
+    theme: flatly
+    orientation: rows
+    scrolling: true
+    embed-resources: true
+
+editor: visual
+execute:
+  echo: FALSE
+  warning: FALSE
+  message: FALSE
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  fig.align = "center",
+  fig.width = 8,
+  fig.height = 5
+)
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(caret)
+library(randomForest)
+```
+
+```{r carga-y-preparacion}
+#| include: false
+
+# ---- Carga ----
+lung_original <- read.csv(
+  "datos/lung_cancer.csv",
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
+
+names(lung_original) <- trimws(names(lung_original))
+names(lung_original) <- gsub("\\s+", "_", names(lung_original))
+
+# ---- Duplicados ----
+n_duplicados <- sum(duplicated(lung_original))
+lung <- lung_original[!duplicated(lung_original), ]
+
+resumen_limpieza <- data.frame(
+  Indicador = c(
+    "Observaciones originales",
+    "Registros duplicados exactos",
+    "Observaciones luego de eliminar duplicados"
+  ),
+  Cantidad = c(nrow(lung_original), n_duplicados, nrow(lung))
+)
+
+# ---- Preparación de variables ----
+if (!"LUNG_CANCER" %in% names(lung)) {
+  stop("No se encontró la variable LUNG_CANCER.")
+}
+
+lung$AGE <- as.numeric(lung$AGE)
+
+lung$LUNG_CANCER <- trimws(as.character(lung$LUNG_CANCER))
+lung$LUNG_CANCER <- factor(
+  lung$LUNG_CANCER,
+  levels = c("NO", "YES"),
+  labels = c("No", "Sí")
+)
+
+variables_binarias <- setdiff(names(lung), c("GENDER", "AGE", "LUNG_CANCER"))
+
+for (v in variables_binarias) {
+  valores <- trimws(as.character(lung[[v]]))
+  lung[[v]] <- factor(valores, levels = c("1", "2"), labels = c("No", "Sí"))
+}
+
+lung$GENDER <- factor(trimws(as.character(lung$GENDER)))
+
+lung <- lung[!is.na(lung$LUNG_CANCER) & !is.na(lung$AGE), ]
+lung <- droplevels(lung)
+
+# ---- Faltantes ----
+faltantes <- data.frame(
+  Variable = names(lung_original),
+  Cantidad = sapply(lung_original, function(x) sum(is.na(x))),
+  Porcentaje = round(sapply(lung_original, function(x) mean(is.na(x)) * 100), 2)
+)
+
+```
+
+```{r modelo-rf}
+#| include: false
+
+set.seed(123)
+indices <- createDataPartition(lung$LUNG_CANCER, p = 0.80, list = FALSE)
+train <- lung[indices, ]
+test <- lung[-indices, ]
+
+train <- droplevels(train)
+test <- droplevels(test)
+
+for (v in names(train)) {
+  if (is.factor(train[[v]])) {
+    test[[v]] <- factor(test[[v]], levels = levels(train[[v]]))
+  }
+}
+
+set.seed(123)
+modelo_rf <- randomForest(
+  LUNG_CANCER ~ .,
+  data = train,
+  ntree = 500,
+  importance = TRUE
+)
+
+predicciones <- predict(modelo_rf, newdata = test, type = "response")
+matriz_conf <- confusionMatrix(predicciones, test$LUNG_CANCER, positive = "Sí")
+
+importancia <- importance(modelo_rf)
+importancia_df <- data.frame(
+  Variable = rownames(importancia),
+  importancia,
+  row.names = NULL
+)
+importancia_df <- importancia_df[order(importancia_df$MeanDecreaseGini, decreasing = TRUE), ]
+```
+
+# Resumen 
+
+## Row {height="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Muestra analizada"
+
+list(
+  icon = "clipboard-data",
+  color = "primary",
+  value = nrow(lung)
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Accuracy"
+
+list(
+  icon = "bullseye",
+  color = "success",
+  value = unname(
+    scales::percent(
+      matriz_conf$overall["Accuracy"],
+      accuracy = 0.1
+    )
+  )
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Sensibilidad"
+
+list(
+  icon = "arrow-up-circle",
+  color = "info",
+  value = unname(
+    scales::percent(
+      matriz_conf$byClass["Sensitivity"],
+      accuracy = 0.1
+    )
+  )
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Especificidad"
+
+list(
+  icon = "arrow-down-circle",
+  color = "warning",
+  value = unname(
+    scales::percent(
+      matriz_conf$byClass["Specificity"],
+      accuracy = 0.1
+    )
+  )
+)
+```
+
+## Row {height="80%"}
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Objetivo del análisis"
+
+knitr::asis_output(
+  paste0(
+    "**Objetivo**\n\n",
+    "Analizar las características de personas con y sin cáncer de pulmón, ",
+    "identificar diferencias entre ambos grupos y evaluar el desempeño ",
+    "predictivo de un modelo Random Forest.\n\n",
+    "**Muestra analizada:** ", nrow(lung), " observaciones luego de la limpieza.\n\n",
+    "**Metodología:** análisis exploratorio, comparación entre grupos, ",
+    "pruebas de asociación para variables categóricas y evaluación de ",
+    "un modelo Random Forest."
+  )
+)
+```
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Distribución del diagnóstico"
+
+frecuencias <- as.data.frame(table(lung$LUNG_CANCER))
+names(frecuencias) <- c("Diagnóstico", "Frecuencia")
+
+frecuencias$Porcentaje <- round(
+  frecuencias$Frecuencia / sum(frecuencias$Frecuencia) * 100,
+  1
+)
+
+ggplot(
+  frecuencias,
+  aes(
+    x = Diagnóstico,
+    y = Frecuencia,
+    fill = Diagnóstico
+  )
+) +
+  geom_col(width = 0.65) +
+  geom_text(
+    aes(
+      label = paste0(
+        Frecuencia,
+        " (",
+        Porcentaje,
+        "%)"
+      )
+    ),
+    vjust = -0.4,
+    size = 4.5
+  ) +
+  scale_fill_manual(
+    values = c(
+      "No" = "#2E86AB",
+      "Sí" = "#E63946"
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = "Frecuencia",
+    fill = "Diagnóstico"
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_blank(),
+    axis.text.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    panel.grid.minor = element_blank()
+  )
+```
+
+# Exploración 
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Edad según diagnóstico"
+ggplot(lung, aes(x = LUNG_CANCER, y = AGE, fill = LUNG_CANCER)) +
+  geom_boxplot(alpha = 0.8, width = 0.5) +
+  scale_fill_manual(values = c("No" = "#2E86AB", "Sí" = "#E63946")) +
+  theme_minimal(base_size = 14) +
+  labs(x = "Diagnóstico", y = "Edad") +
+  theme(legend.position = "none")
+```
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Distribución de la edad"
+ggplot(lung, aes(x = AGE, fill = LUNG_CANCER)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("No" = "#2E86AB", "Sí" = "#E63946")) +
+  theme_minimal(base_size = 14) +
+  labs(x = "Edad", y = "Densidad", fill = "Diagnóstico")
+```
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Histograma de la edad"
+ggplot(lung, aes(x = AGE, fill = LUNG_CANCER)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 25) +
+  scale_fill_manual(values = c("No" = "#2E86AB", "Sí" = "#E63946")) +
+  theme_minimal(base_size = 14) +
+  labs(x = "Edad", y = "Frecuencia", fill = "Diagnóstico")
+```
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Edad, tabaquismo y diagnóstico"
+ggplot(lung, aes(x = SMOKING, y = AGE, color = LUNG_CANCER)) +
+  geom_jitter(width = 0.15, alpha = 0.8, size = 2.5) +
+  scale_color_manual(values = c("No" = "#2E86AB", "Sí" = "#E63946")) +
+  theme_minimal(base_size = 14) +
+  labs(x = "Tabaquismo", y = "Edad", color = "Diagnóstico")
+```
+
+# Variables categóricas 
+
+## Row {height="45%"}
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Sexo según diagnóstico"
+ggplot(lung, aes(x = LUNG_CANCER, fill = GENDER)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Diagnóstico", y = "Proporción", fill = "Sexo") +
+  theme_minimal()
+```
+
+### Column {width="60%"}
+
+```{r}
+#| title:  "Porcentaje de respuestas afirmativas por variable y diagnóstico"
+datos_grafico <- do.call(
+  rbind,
+  lapply(variables_binarias, function(v) {
+    temp <- aggregate(
+      lung[[v]] == "Sí",
+      by = list(Diagnostico = lung$LUNG_CANCER),
+      FUN = mean
+    )
+    names(temp)[2] <- "Porcentaje"
+    temp$Variable <- v
+    temp$Porcentaje <- temp$Porcentaje * 100
+    temp
+  })
+)
+
+ggplot(datos_grafico, aes(x = Variable, y = Porcentaje, fill = Diagnostico)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(x = "Variable", y = "% respuestas Sí", fill = "Diagnóstico") +
+  theme_minimal()
+```
+
+## Row {height="55%"}
+
+```{r}
+#| title: "Pruebas de asociación (Chi-cuadrado / Fisher, ajuste BH)"
+resultados_categoricos <- data.frame()
+
+for (v in c("GENDER", variables_binarias)) {
+  tabla <- table(lung[[v]], lung$LUNG_CANCER)
+  chi <- suppressWarnings(chisq.test(tabla, correct = FALSE))
+
+  if (any(chi$expected < 5)) {
+    prueba <- fisher.test(tabla)
+    nombre_prueba <- "Fisher"
+    estadistico <- NA
+  } else {
+    prueba <- chi
+    nombre_prueba <- "Chi-cuadrado"
+    estadistico <- unname(chi$statistic)
+  }
+
+  resultados_categoricos <- rbind(
+    resultados_categoricos,
+    data.frame(Variable = v, Prueba = nombre_prueba, Estadistico = estadistico, p_valor = prueba$p.value)
+  )
+}
+
+resultados_categoricos$p_ajustado_BH <- p.adjust(resultados_categoricos$p_valor, method = "BH")
+
+knitr::kable(resultados_categoricos, digits = 4)
+```
+
+# Modelo Random Forest 
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Matriz de confusión (conjunto de prueba)"
+knitr::kable(
+  matriz_conf$table,
+  caption = NULL
+)
+```
+
+```{r}
+#| title: "Métricas del modelo"
+metricas <- data.frame(
+  Métrica = c("Accuracy", "Sensibilidad", "Especificidad", "Balanced Accuracy", "Kappa"),
+  Valor = round(c(
+    matriz_conf$overall["Accuracy"],
+    matriz_conf$byClass["Sensitivity"],
+    matriz_conf$byClass["Specificity"],
+    matriz_conf$byClass["Balanced Accuracy"],
+    matriz_conf$overall["Kappa"]
+  ), 3)
+)
+knitr::kable(metricas)
+```
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Importancia de variables (Random Forest)"
+
+library(gridExtra)
+
+p_accuracy <- ggplot(
+  importancia_df,
+  aes(x = reorder(Variable, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy, fill = MeanDecreaseAccuracy)
+) +
+  geom_col() +
+  scale_fill_gradient(low = "#F6C6C6", high = "#E63946") +
+  coord_flip() +
+  theme_minimal(base_size = 11) +
+  labs(title = "Mean Decrease Accuracy", x = NULL, y = NULL) +
+  theme(legend.position = "none")
+
+p_gini <- ggplot(
+  importancia_df,
+  aes(x = reorder(Variable, MeanDecreaseGini), y = MeanDecreaseGini, fill = MeanDecreaseGini)
+) +
+  geom_col() +
+  scale_fill_gradient(low = "#A9CCE3", high = "#2E86AB") +
+  coord_flip() +
+  theme_minimal(base_size = 11) +
+  labs(title = "Mean Decrease Gini", x = NULL, y = NULL) +
+  theme(legend.position = "none")
+
+grid.arrange(p_accuracy, p_gini, ncol = 1)
+```
+
+## Row {height="50%"}
+
+```{r}
+#| title: "Tabla de importancia de variables"
+knitr::kable(importancia_df, digits = 3, row.names = FALSE)
+```
+
+
+
+# Conclusiones 
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+::: {.callout-important title="Desempeño del modelo"}
+El modelo Random Forest alcanzó una **sensibilidad del 100%** pero una **especificidad de apenas 42,9%**, explicado por el marcado desbalance de clases (predominan los casos positivos en la muestra).
+:::
+
+### Column {width="50%"}
+
+::: {.callout-note title="Edad y diagnóstico"}
+La comparación de la edad entre grupos **no mostró diferencias estadísticamente significativas** (Mann-Whitney, p = 0,1095).
+:::
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+::: {.callout-tip title="Variables asociadas al diagnóstico"}
+YELLOW_FINGERS, ANXIETY, PEER_PRESSURE, CHRONIC_DISEASE, FATIGUE, ALLERGY, WHEEZING, ALCOHOL_CONSUMING, COUGHING, SWALLOWING_DIFFICULTY y CHEST_PAIN mostraron **asociación significativa** con el diagnóstico tras la corrección de Benjamini-Hochberg.
+:::
+
+### Column {width="50%"}
+
+::: {.callout-warning title="Limitaciones"}
+Los resultados corresponden a una única base de datos y **no constituyen una validación clínica** del modelo. La importancia de variables no implica causalidad.
+:::
