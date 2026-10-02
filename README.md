@@ -7,8 +7,7 @@
 ## 📌 Descripción del Proyecto
 Este proyecto consiste en el desarrollo de un **Dashboard Interactivo** diseñado para explorar, visualizar y analizar variables relacionadas con el cáncer de pulmón. El objetivo principal es facilitar el análisis exploratorio de datos mediante una interfaz intuitiva, moderna y dinámica, orientada a la toma de decisiones e investigación biomédica/bioinformática.
 
-🔗 **[Ver Dashboard Interactivo en Vivo](https://tu-usuario.github.io/dashboard-cancer-pulmon/)** *(Reemplazá "tu-usuario" por tu usuario real de GitHub)*
-
+🔗 **[Ver Dashboard Interactivo en Vivo](https://analauraarmendariz-cyber.github.io/dashboard-cancer-pulmon/)**
 ---
 
 ## 🛠️ Tecnologías y Librerías Utilizadas
