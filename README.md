@@ -33,6 +33,10 @@ Este proyecto consiste en el desarrollo de un **Dashboard Interactivo** diseñad
 ---
 
 ## 👤 Autora
-**Dra. Ana Laura Armendariz**  
-*Microbióloga | Especialista en Bioinformática y Análisis de Datos*  
-- Email: analauraarmendariz@gmail.com
+**Dra. Ana Laura Armendáriz**  
+*Microbióloga | Especialista en Bioestadística y Bioinformática*  
+- GitHub: [analauraarmendariz-cyber](https://github.com/analauraarmendariz-cyber)  
+- LinkedIn: [Perfil Profesional](https://www.linkedin.com/in/ana-laura-armendariz-12499148/)
+
+---
+
